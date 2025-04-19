@@ -438,7 +438,7 @@ session_start();
             <p class="animate__animated animate__fadeIn animate__delay-1s">Create your personalized landing page that beautifully showcases all your social profiles, websites, and online content in one simple link.</p>
             <div class="animate__animated animate__fadeIn animate__delay-2s">
                 <a href="register.php" class="btn btn-hero primary me-3 mb-3">Create Your Page <i class="fas fa-arrow-right ms-1"></i></a>
-                <a href="#features" class="btn btn-hero secondary mb-3">Discover Features</a>
+                <a href="#features" class="btn btn-hero primary mb-3">Discover Features</a>
             </div>
         </div>
         <svg class="wave" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320">

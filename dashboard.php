@@ -25,6 +25,133 @@ $stmt->bind_param("i", $user_id);
 $stmt->execute();
 $links = $stmt->get_result();
 
+// Get link click analytics
+$linkClicksSQL = "SELECT 
+                    l.platform, 
+                    l.display_text,
+                    COUNT(lc.click_id) as click_count 
+                  FROM links l
+                  LEFT JOIN link_clicks lc ON l.link_id = lc.link_id
+                  WHERE l.user_id = ?
+                  GROUP BY l.link_id
+                  ORDER BY click_count DESC";
+$stmt = $conn->prepare($linkClicksSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$linkClicks = $stmt->get_result();
+
+// Get analytics data
+$analyticsSQL = "SELECT 
+                    COUNT(*) as total_visits,
+                    COUNT(DISTINCT visitor_ip) as unique_visitors,
+                    DATE(visit_time) as visit_date,
+                    COUNT(*) as daily_visits
+                  FROM profile_visits 
+                  WHERE user_id = ?
+                  GROUP BY DATE(visit_time)
+                  ORDER BY visit_date DESC
+                  LIMIT 30";
+$stmt = $conn->prepare($analyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$analyticsResult = $stmt->get_result();
+
+// Prepare analytics data for charts
+$dates = [];
+$visitCounts = [];
+$totalVisits = 0;
+$uniqueVisitors = 0;
+
+while ($row = $analyticsResult->fetch_assoc()) {
+    $dates[] = date('M d', strtotime($row['visit_date']));
+    $visitCounts[] = $row['daily_visits'];
+    $totalVisits += $row['daily_visits'];
+    if (isset($row['unique_visitors'])) {
+        $uniqueVisitors = $row['unique_visitors'];
+    }
+}
+
+// Get analytics data - updated query
+$analyticsSQL = "SELECT 
+                    COUNT(*) as total_visits,
+                    COUNT(DISTINCT visitor_ip) as unique_visitors,
+                    DATE(visit_time) as visit_date,
+                    COUNT(*) as daily_visits
+                  FROM profile_visits 
+                  WHERE user_id = ?
+                  GROUP BY DATE(visit_time)
+                  ORDER BY visit_date DESC
+                  LIMIT 30";
+
+// New query for geographic data
+$geoAnalyticsSQL = "SELECT 
+                      country, 
+                      COUNT(*) as visit_count 
+                    FROM profile_visits 
+                    WHERE user_id = ? AND country IS NOT NULL
+                    GROUP BY country 
+                    ORDER BY visit_count DESC 
+                    LIMIT 10";
+$stmt = $conn->prepare($geoAnalyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$countryData = $stmt->get_result();
+
+// City analytics
+$cityAnalyticsSQL = "SELECT 
+                      city, 
+                      country,
+                      COUNT(*) as visit_count 
+                    FROM profile_visits 
+                    WHERE user_id = ? AND city IS NOT NULL
+                    GROUP BY city, country
+                    ORDER BY visit_count DESC 
+                    LIMIT 10";
+$stmt = $conn->prepare($cityAnalyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$cityData = $stmt->get_result();
+
+// Device analytics
+$deviceAnalyticsSQL = "SELECT 
+                        device_type, 
+                        COUNT(*) as visit_count 
+                      FROM profile_visits 
+                      WHERE user_id = ? AND device_type IS NOT NULL
+                      GROUP BY device_type
+                      ORDER BY visit_count DESC";
+$stmt = $conn->prepare($deviceAnalyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$deviceData = $stmt->get_result();
+
+// Browser analytics
+$browserAnalyticsSQL = "SELECT 
+                         browser, 
+                         COUNT(*) as visit_count 
+                       FROM profile_visits 
+                       WHERE user_id = ? AND browser IS NOT NULL
+                       GROUP BY browser
+                       ORDER BY visit_count DESC";
+$stmt = $conn->prepare($browserAnalyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$browserData = $stmt->get_result();
+
+// Referrer analytics
+$referrerAnalyticsSQL = "SELECT 
+                          referrer,
+                          COUNT(*) as visit_count 
+                        FROM profile_visits 
+                        WHERE user_id = ? AND referrer IS NOT NULL
+                        GROUP BY referrer
+                        ORDER BY visit_count DESC
+                        LIMIT 5";
+$stmt = $conn->prepare($referrerAnalyticsSQL);
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$referrerData = $stmt->get_result();
+ 
 // Process link submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_link'])) {
     $platform = $_POST['platform'];
@@ -61,6 +188,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_link'])) {
     
     if ($stmt->execute()) {
         // Refresh the page to show the updated links
+        header("Location: dashboard.php");
+        exit;
+    }
+}
+
+// Process link layout update
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_layout'])) {
+    $layout_style = $_POST['layout_style'];
+    
+    $updateSQL = "UPDATE users SET links_layout = ? WHERE user_id = ?";
+    $stmt = $conn->prepare($updateSQL);
+    $stmt->bind_param("si", $layout_style, $user_id);
+    
+    if ($stmt->execute()) {
+        // Refresh the page to show the updated layout
         header("Location: dashboard.php");
         exit;
     }
@@ -106,6 +248,7 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -115,512 +258,12 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary-color: #6C63FF;
-            --secondary-color: #FF6584;
-            --accent-color: #4CD5C5;
-            --dark-color: #2A2A2A;
-            --light-color: #F8F9FA;
-            --gradient: linear-gradient(135deg, var(--primary-color) 0%, #8E2DE2 100%);
-        }
-        
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #f8f9fa;
-            color: #444;
-            overflow-x: hidden;
-        }
-        
-        .navbar {
-            background: rgba(255, 255, 255, 0.95) !important;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
-            padding: 15px 0;
-            transition: all 0.3s ease;
-        }
-        
-        .navbar-brand {
-            font-weight: 700;
-            color: var(--primary-color) !important;
-            font-size: 1.6rem;
-        }
-        
-        .navbar-nav .nav-link {
-            color: var(--dark-color) !important;
-            font-weight: 500;
-            margin: 0 10px;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-        
-        .navbar-nav .nav-link:hover {
-            color: var(--primary-color) !important;
-        }
-        
-        .navbar-nav .nav-link::after {
-            content: '';
-            position: absolute;
-            width: 0;
-            height: 2px;
-            background-color: var(--primary-color);
-            bottom: -2px;
-            left: 0;
-            transition: width 0.3s ease;
-        }
-        
-        .navbar-nav .nav-link:hover::after,
-        .navbar-nav .nav-link.active::after {
-            width: 100%;
-        }
-        
-        .dashboard-header {
-            background: var(--gradient);
-            padding: 100px 0 30px;
-            color: white;
-            position: relative;
-            overflow: hidden;
-            margin-bottom: 40px;
-        }
-        
-        .dashboard-header::before {
-            content: '';
-            position: absolute;
-            width: 300px;
-            height: 300px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            top: -100px;
-            right: -100px;
-        }
-        
-        .dashboard-header::after {
-            content: '';
-            position: absolute;
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.1);
-            bottom: -50px;
-            left: -50px;
-        }
-        
-        .dashboard-header h1 {
-            font-weight: 700;
-            margin-bottom: 10px;
-            font-size: 2.5rem;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        
-        .dashboard-header p {
-            max-width: 600px;
-            margin-bottom: 0;
-            opacity: 0.9;
-        }
-        
-        .profile-card {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            border: none;
-            transition: all 0.3s ease;
-            /* height: 100%; */
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .profile-card::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            height: 4px;
-            background: var(--gradient);
-            transform: scaleX(0);
-            transform-origin: right;
-            transition: transform 0.3s ease;
-        }
-        
-        .profile-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(108, 99, 255, 0.1);
-        }
-        
-        .profile-card:hover::after {
-            transform: scaleX(1);
-            transform-origin: left;
-        }
-        
-        .profile-image {
-            width: 150px;
-            height: 150px;
-            object-fit: cover;
-            border-radius: 50%;
-            border: 5px solid white;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .profile-image:hover {
-            transform: scale(1.05);
-            box-shadow: 0 8px 25px rgba(108, 99, 255, 0.2);
-        }
-        
-        .add-link-card {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            border: none;
-            margin-bottom: 30px;
-            transition: all 0.3s ease;
-        }
-        
-        .add-link-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(108, 99, 255, 0.1);
-        }
-        
-        .my-links-card {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-            border: none;
-            transition: all 0.3s ease;
-        }
-        
-        .my-links-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(108, 99, 255, 0.1);
-        }
-        
-        .card-header {
-            background: transparent;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-            padding-left: 0;
-            padding-right: 0;
-        }
-        
-        .card-header h5 {
-            font-weight: 600;
-            color: var(--dark-color);
-            position: relative;
-            display: inline-block;
-            padding-bottom: 10px;
-        }
-        
-        .card-header h5::after {
-            content: '';
-            position: absolute;
-            width: 50px;
-            height: 3px;
-            background: var(--primary-color);
-            bottom: 0;
-            left: 0;
-            border-radius: 2px;
-        }
-        
-        .form-label {
-            font-weight: 500;
-            color: #555;
-            margin-bottom: 8px;
-        }
-        
-        .form-control {
-            padding: 12px 15px;
-            border-radius: 10px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .form-control:focus {
-            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2);
-            border-color: var(--primary-color);
-        }
-        
-        .form-select {
-            padding: 12px 15px;
-            border-radius: 10px;
-            border: 1px solid rgba(0, 0, 0, 0.1);
-            transition: all 0.3s ease;
-        }
-        
-        .form-select:focus {
-            box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.2);
-            border-color: var(--primary-color);
-        }
-        
-        .btn {
-            padding: 12px 25px;
-            border-radius: 10px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-primary {
-            background: var(--gradient);
-            border: none;
-            box-shadow: 0 5px 15px rgba(108, 99, 255, 0.3);
-        }
-        
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #5d56d8 0%, #7a28c0 100%);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(108, 99, 255, 0.4);
-        }
-        
-        .btn-success {
-            background: linear-gradient(135deg, #28c76f 0%, #00c6b4 100%);
-            border: none;
-            box-shadow: 0 5px 15px rgba(40, 199, 111, 0.3);
-        }
-        
-        .btn-success:hover {
-            background: linear-gradient(135deg, #24b565 0%, #00b3a2 100%);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(40, 199, 111, 0.4);
-        }
-        
-        .btn-outline-primary {
-            border: 2px solid var(--primary-color);
-            color: var(--primary-color);
-        }
-        
-        .btn-outline-primary:hover {
-            background: var(--primary-color);
-            color: white;
-            transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(108, 99, 255, 0.2);
-        }
-        
-        .btn-danger {
-            background: linear-gradient(135deg, #FF6584 0%, #FF4C71 100%);
-            border: none;
-            box-shadow: 0 5px 15px rgba(255, 101, 132, 0.3);
-        }
-        
-        .btn-danger:hover {
-            background: linear-gradient(135deg, #ff5172 0%, #ff395f 100%);
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(255, 101, 132, 0.4);
-        }
-        
-        .table {
-            border-collapse: separate;
-            border-spacing: 0 10px;
-        }
-        
-        .table thead th {
-            border-bottom: none;
-            color: #777;
-            font-weight: 600;
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 1px;
-            padding: 15px;
-        }
-        
-        .table tbody tr {
-            background: white;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.02);
-            border-radius: 15px;
-            transition: all 0.3s ease;
-        }
-        
-        .table tbody tr:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(108, 99, 255, 0.1);
-        }
-        
-        .table tbody td {
-            padding: 15px;
-            border-top: none;
-            vertical-align: middle;
-        }
-        
-        .table tbody tr td:first-child {
-            border-top-left-radius: 10px;
-            border-bottom-left-radius: 10px;
-        }
-        
-        .table tbody tr td:last-child {
-            border-top-right-radius: 10px;
-            border-bottom-right-radius: 10px;
-        }
-        
-        .platform-icon {
-            width: 40px;
-            height: 40px;
-            background: rgba(108, 99, 255, 0.1);
-            border-radius: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-size: 1.2rem;
-            color: var(--primary-color);
-        }
-        
-        .badge {
-            padding: 8px 15px;
-            border-radius: 50px;
-            font-weight: 500;
-            font-size: 0.85rem;
-        }
-        
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-        }
-        
-        .empty-state-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            color: #dde;
-        }
-        
-        .footer {
-            background: var(--dark-color);
-            color: white;
-            padding: 40px 0;
-            margin-top: 80px;
-        }
-        
-        .footer-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .footer-logo {
-            font-weight: 700;
-            font-size: 1.5rem;
-            color: white;
-            text-decoration: none;
-        }
-        
-        .footer-logo span {
-            color: var(--primary-color);
-        }
-        
-        .footer-links {
-            display: flex;
-            gap: 20px;
-        }
-        
-        .footer-links a {
-            color: rgba(255, 255, 255, 0.7);
-            text-decoration: none;
-            transition: all 0.3s ease;
-        }
-        
-        .footer-links a:hover {
-            color: white;
-        }
-        
-        .social-links {
-            display: flex;
-            gap: 15px;
-        }
-        
-        .social-icon {
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 1.2rem;
-            transition: all 0.3s ease;
-        }
-        
-        .social-icon:hover {
-            background: var(--primary-color);
-            transform: translateY(-3px);
-        }
-        
-        .copyright {
-            margin-top: 30px;
-            color: rgba(255, 255, 255, 0.5);
-            text-align: center;
-        }
-        
-        .qr-modal .modal-content {
-            border-radius: 20px;
-            overflow: hidden;
-            border: none;
-        }
-        
-        .qr-modal .modal-header {
-            background: var(--gradient);
-            color: white;
-            border-bottom: none;
-        }
-        
-        .qr-modal .modal-title {
-            font-weight: 600;
-        }
-        
-        .qr-modal .modal-body {
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .qr-code-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            margin: 0 auto;
-            width: fit-content;
-        }
-        
-        .qr-code-container img {
-            max-width: 100%;
-            height: auto;
-        }
-        
-        .floating {
-            animation: floating 3s ease-in-out infinite;
-        }
-        
-        @keyframes floating {
-            0% { transform: translateY(0px); }
-            50% { transform: translateY(-8px); }
-            100% { transform: translateY(0px); }
-        }
-        
-        @media (max-width: 991px) {
-            .dashboard-header h1 {
-                font-size: 2rem;
-            }
-            
-            .navbar-collapse {
-                background: white;
-                padding: 20px;
-                border-radius: 10px;
-                box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-                margin-top: 10px;
-            }
-            
-            .navbar-nav .nav-link {
-                padding: 10px 0;
-            }
-            
-            .footer-content {
-                flex-direction: column;
-                text-align: center;
-                gap: 20px;
-            }
-        }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="./css/dashboard.css">
 </head>
+
 <body>
     <nav class="navbar navbar-expand-lg navbar-light fixed-top">
         <div class="container">
@@ -636,7 +279,8 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                         <a class="nav-link active" href="dashboard.php">Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="profile.php?user=<?php echo $userData['username']; ?>" target="_blank">View My Page</a>
+                        <a class="nav-link" href="profile.php?user=<?php echo $userData['username']; ?>"
+                            target="_blank">View My Page</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#qrCodeModal">
@@ -655,11 +299,14 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-8">
-                    <h1 class="animate__animated animate__fadeIn">Welcome back, <?php echo htmlspecialchars($userData['username']); ?>!</h1>
-                    <p class="animate__animated animate__fadeIn animate__delay-1s">Manage your social links and customize your profile from your personal dashboard.</p>
+                    <h1 class="animate__animated animate__fadeIn">Welcome back,
+                        <?php echo htmlspecialchars($userData['username']); ?>!</h1>
+                    <p class="animate__animated animate__fadeIn animate__delay-1s">Manage your social links and
+                        customize your profile from your personal dashboard.</p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <a href="profile.php?user=<?php echo $userData['username']; ?>" class="btn btn-light mt-3" target="_blank">
+                    <a href="profile.php?user=<?php echo $userData['username']; ?>" class="btn btn-light mt-3"
+                        target="_blank">
                         <i class="fas fa-eye me-2"></i> Preview My Page
                     </a>
                 </div>
@@ -672,24 +319,26 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
             <div class="col-lg-4">
                 <div class="profile-card mb-4">
                     <div class="text-center">
-                        <img src="<?php echo !empty($userData['profile_image']) ? $userData['profile_image'] : 'https://via.placeholder.com/150'; ?>" 
-                             class="profile-image mb-4 floating" alt="Profile Image">
+                        <img src="<?php echo !empty($userData['profile_image']) ? $userData['profile_image'] : 'https://via.placeholder.com/150'; ?>"
+                            class="profile-image mb-4 floating" alt="Profile Image">
                         <h3><?php echo htmlspecialchars($userData['username']); ?></h3>
                         <p class="text-muted"><?php echo nl2br(htmlspecialchars($userData['bio'])); ?></p>
-                        
+
                         <hr>
-                        
+
                         <div class="d-flex justify-content-center mb-3">
-                            <a href="profile.php?user=<?php echo $userData['username']; ?>" class="btn btn-primary me-2" target="_blank">
+                            <a href="profile.php?user=<?php echo $userData['username']; ?>" class="btn btn-primary me-2"
+                                target="_blank">
                                 <i class="fas fa-external-link-alt me-1"></i> View Profile
                             </a>
-                            <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#qrCodeModal">
+                            <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal"
+                                data-bs-target="#qrCodeModal">
                                 <i class="fas fa-qrcode"></i> QR Code
                             </a>
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="profile-card">
                     <div class="card-header bg-transparent">
                         <h5 class="mb-0">Edit Profile</h5>
@@ -703,15 +352,22 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                             </div>
                             <div class="mb-3">
                                 <label for="bio" class="form-label">Bio</label>
-                                <textarea class="form-control" id="bio" name="bio" rows="3" placeholder="Tell visitors about yourself..."><?php echo htmlspecialchars($userData['bio']); ?></textarea>
+                                <textarea class="form-control" id="bio" name="bio" rows="3"
+                                    placeholder="Tell visitors about yourself..."><?php echo htmlspecialchars($userData['bio']); ?></textarea>
                             </div>
                             <div class="mb-3">
                                 <label for="theme" class="form-label">Theme</label>
                                 <select class="form-select" id="theme" name="theme">
-                                    <option value="default" <?php echo $userData['theme'] === 'default' ? 'selected' : ''; ?>>Default</option>
-                                    <option value="dark" <?php echo $userData['theme'] === 'dark' ? 'selected' : ''; ?>>Dark</option>
-                                    <option value="light" <?php echo $userData['theme'] === 'light' ? 'selected' : ''; ?>>Light</option>
-                                    <option value="colorful" <?php echo $userData['theme'] === 'colorful' ? 'selected' : ''; ?>>Colorful</option>
+                                    <option value="default"
+                                        <?php echo $userData['theme'] === 'default' ? 'selected' : ''; ?>>Default
+                                    </option>
+                                    <option value="dark" <?php echo $userData['theme'] === 'dark' ? 'selected' : ''; ?>>
+                                        Dark</option>
+                                    <option value="light"
+                                        <?php echo $userData['theme'] === 'light' ? 'selected' : ''; ?>>Light</option>
+                                    <option value="colorful"
+                                        <?php echo $userData['theme'] === 'colorful' ? 'selected' : ''; ?>>Colorful
+                                    </option>
                                 </select>
                             </div>
                             <button type="submit" name="update_profile" class="btn btn-primary w-100">
@@ -721,7 +377,7 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                     </div>
                 </div>
             </div>
-            
+
             <div class="col-lg-8">
                 <div class="add-link-card">
                     <div class="card-header bg-transparent">
@@ -747,11 +403,13 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="display_text" class="form-label">Display Text</label>
-                                    <input type="text" class="form-control" id="display_text" name="display_text" placeholder="Follow me on Instagram" required>
+                                    <input type="text" class="form-control" id="display_text" name="display_text"
+                                        placeholder="Follow me on Instagram" required>
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="url" class="form-label">URL</label>
-                                    <input type="url" class="form-control" id="url" name="url" placeholder="https://" required>
+                                    <input type="url" class="form-control" id="url" name="url" placeholder="https://"
+                                        required>
                                 </div>
                             </div>
                             <button type="submit" name="add_link" class="btn btn-success">
@@ -760,7 +418,7 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                         </form>
                     </div>
                 </div>
-                
+
                 <div class="my-links-card">
                     <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">My Links</h5>
@@ -768,63 +426,197 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                     </div>
                     <div class="card-body">
                         <?php if ($links->num_rows > 0): ?>
-                            <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Platform</th>
-                                            <th>Display Text</th>
-                                            <th>URL</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="sortable-links">
-                                        <?php while ($link = $links->fetch_assoc()): ?>
-                                            <tr data-id="<?php echo $link['link_id']; ?>">
-                                                <td>
-                                                    <div class="d-flex align-items-center">
-                                                        <div class="platform-icon">
-                                                            <i class="fab fa-<?php echo $link['platform']; ?>"></i>
-                                                        </div>
-                                                        <?php echo ucfirst($link['platform']); ?>
-                                                    </div>
-                                                </td>
-                                                <td><?php echo htmlspecialchars($link['display_text']); ?></td>
-                                <td>
-                                    <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank" class="text-truncate d-inline-block" style="max-width: 150px;">
-                                        <?php echo htmlspecialchars($link['url']); ?>
-                                    </a>
-                                </td>
-                                <td>
-                                    <form method="POST" action="" class="d-inline">
-                                        <input type="hidden" name="link_id" value="<?php echo $link['link_id']; ?>">
-                                        <button type="submit" name="delete_link" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this link?')">
-                                            <i class="fas fa-trash-alt"></i>
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        <?php else: ?>
-            <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-link-slash"></i>
-                </div>
-                <h5>No links added yet</h5>
-                <p class="text-muted">Start adding your social links using the form above!</p>
-            </div>
-        <?php endif; ?>
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Platform</th>
+                                        <th>Display Text</th>
+                                        <th>URL</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sortable-links">
+                                    <?php while ($link = $links->fetch_assoc()): ?>
+                                    <tr data-id="<?php echo $link['link_id']; ?>">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <div class="platform-icon">
+                                                    <i class="fab fa-<?php echo $link['platform']; ?>"></i>
+                                                </div>
+                                                <?php echo ucfirst($link['platform']); ?>
+                                            </div>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($link['display_text']); ?></td>
+                                        <td>
+                                            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank"
+                                                class="text-truncate d-inline-block" style="max-width: 150px;">
+                                                <?php echo htmlspecialchars($link['url']); ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <form method="POST" action="" class="d-inline">
+                                                <input type="hidden" name="link_id"
+                                                    value="<?php echo $link['link_id']; ?>">
+                                                <button type="submit" name="delete_link" class="btn btn-sm btn-danger"
+                                                    onclick="return confirm('Are you sure you want to delete this link?')">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php else: ?>
+                        <div class="empty-state">
+                            <div class="empty-state-icon">
+                                <i class="fas fa-link-slash"></i>
+                            </div>
+                            <h5>No links added yet</h5>
+                            <p class="text-muted">Start adding your social links using the form above!</p>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Analytics Overview Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="analytics-card">
+                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Analytics Overview</h5>
+                        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                            data-bs-target="#analyticsDetailsModal">
+                            <i class="fas fa-chart-line me-1"></i> View Detailed Analytics
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="stat-card">
+                                    <div class="stat-icon"
+                                        style="background: rgba(108, 99, 255, 0.1); color: var(--primary-color);">
+                                        <i class="fas fa-eye"></i>
+                                    </div>
+                                    <div class="stat-value"><?php echo $totalVisits; ?></div>
+                                    <div class="stat-label">Total Profile Views</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="stat-card">
+                                    <div class="stat-icon" style="background: rgba(40, 199, 111, 0.1); color: #28c76f;">
+                                        <i class="fas fa-users"></i>
+                                    </div>
+                                    <div class="stat-value"><?php echo $uniqueVisitors; ?></div>
+                                    <div class="stat-label">Unique Visitors</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="stat-card">
+                                    <div class="stat-icon"
+                                        style="background: rgba(255, 101, 132, 0.1); color: var(--secondary-color);">
+                                        <i class="fas fa-mouse-pointer"></i>
+                                    </div>
+                                    <?php
+                                    // Get total link clicks
+                                    $totalClicksSQL = "SELECT COUNT(*) as total_clicks FROM link_clicks WHERE user_id = ?";
+                                    $stmt = $conn->prepare($totalClicksSQL);
+                                    $stmt->bind_param("i", $user_id);
+                                    $stmt->execute();
+                                    $totalClicks = $stmt->get_result()->fetch_assoc()['total_clicks'];
+                                    ?>
+                                    <div class="stat-value"><?php echo $totalClicks; ?></div>
+                                    <div class="stat-label">Total Link Clicks</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="visitsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Social Links Layout Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="analytics-card">
+                    <div class="card-header bg-transparent">
+                        <h5 class="mb-0">Social Links Layout</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <div class="layout-option <?php echo ($userData['links_layout'] == 'list' || $userData['links_layout'] == '') ? 'active' : ''; ?>"
+                                        data-layout="list">
+                                        <div class="layout-preview">
+                                            <div class="layout-list">
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                            </div>
+                                        </div>
+                                        <h6 class="mt-2 mb-1">List Layout</h6>
+                                        <p class="small text-muted">Links are displayed in a vertical list</p>
+                                        <input type="radio" name="layout_style" value="list" class="d-none"
+                                            <?php echo ($userData['links_layout'] == 'list' || $userData['links_layout'] == '') ? 'checked' : ''; ?>>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="layout-option <?php echo $userData['links_layout'] == 'grid' ? 'active' : ''; ?>"
+                                        data-layout="grid">
+                                        <div class="layout-preview">
+                                            <div class="layout-grid">
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                            </div>
+                                        </div>
+                                        <h6 class="mt-2 mb-1">Grid Layout</h6>
+                                        <p class="small text-muted">Links are displayed in a 2x2 grid</p>
+                                        <input type="radio" name="layout_style" value="grid" class="d-none"
+                                            <?php echo $userData['links_layout'] == 'grid' ? 'checked' : ''; ?>>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="layout-option <?php echo $userData['links_layout'] == 'buttons' ? 'active' : ''; ?>"
+                                        data-layout="buttons">
+                                        <div class="layout-preview">
+                                            <div class="layout-buttons">
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                                <div class="layout-item"></div>
+                                            </div>
+                                        </div>
+                                        <h6 class="mt-2 mb-1">Button Layout</h6>
+                                        <p class="small text-muted">Links are displayed as rounded buttons</p>
+                                        <input type="radio" name="layout_style" value="buttons" class="d-none"
+                                            <?php echo $userData['links_layout'] == 'buttons' ? 'checked' : ''; ?>>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" name="update_layout" class="btn btn-primary mt-3">
+                                <i class="fas fa-save me-2"></i> Save Layout Preference
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
     </div>
 
     <!-- QR Code Modal -->
-    <div class="modal fade qr-modal" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel" aria-hidden="true">
+    <div class="modal fade qr-modal" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel"
+        aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
@@ -836,13 +628,380 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                     <div class="qr-code-container">
                         <img src="<?php echo $qrCodeUrl; ?>" alt="QR Code" class="img-fluid">
                     </div>
-                    <p class="text-center mt-4 text-muted">Share your profile with anyone by showing them this QR code.</p>
+                    <p class="text-center mt-4 text-muted">Share your profile with anyone by showing them this QR code.
+                    </p>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     <a href="<?php echo $qrCodeUrl; ?>" class="btn btn-primary" download="sociallinks-qr.png">
                         <i class="fas fa-download me-2"></i> Download QR Code
                     </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Details Modal -->
+    <!-- Analytics Details Modal -->
+    <div class="modal fade analytics-details-modal" id="analyticsDetailsModal" tabindex="-1"
+        aria-labelledby="analyticsDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="analyticsDetailsModalLabel">Detailed Analytics</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs mb-4" id="analyticsTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="visits-tab" data-bs-toggle="tab"
+                                data-bs-target="#visits" type="button" role="tab" aria-controls="visits"
+                                aria-selected="true">Profile Visits</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="geo-tab" data-bs-toggle="tab" data-bs-target="#geo"
+                                type="button" role="tab" aria-controls="geo" aria-selected="false">Geography</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tech-tab" data-bs-toggle="tab" data-bs-target="#tech"
+                                type="button" role="tab" aria-controls="tech" aria-selected="false">Devices &
+                                Browsers</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="clicks-tab" data-bs-toggle="tab" data-bs-target="#clicks"
+                                type="button" role="tab" aria-controls="clicks" aria-selected="false">Link
+                                Clicks</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content" id="analyticsTabContent">
+                        <!-- Profile Visits Tab -->
+                        <div class="tab-pane fade show active" id="visits" role="tabpanel" aria-labelledby="visits-tab">
+                            <h6 class="mb-3">Daily Profile Visits (Last 30 Days)</h6>
+                            <div class="chart-container">
+                                <canvas id="detailedVisitsChart"></canvas>
+                            </div>
+
+                            <h6 class="mt-4 mb-3">Visit Statistics</h6>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <div class="stat-card">
+                                        <h5 class="text-primary">Total Views</h5>
+                                        <h3><?php echo $totalVisits; ?></h3>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="stat-card">
+                                        <h5 class="text-success">Unique Visitors</h5>
+                                        <h3><?php echo $uniqueVisitors; ?></h3>
+                                    </div>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <div class="stat-card">
+                                        <h5 class="text-info">Average Daily Views</h5>
+                                        <h3><?php echo count($dates) > 0 ? round($totalVisits / count($dates), 1) : 0; ?>
+                                        </h3>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <h6 class="mt-4 mb-3">Traffic Sources</h6>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Referrer</th>
+                                            <th>Visits</th>
+                                            <th>Percentage</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php 
+                                    if ($referrerData && $referrerData->num_rows > 0) {
+                                        while ($row = $referrerData->fetch_assoc()): 
+                                            $percentage = ($row['visit_count'] / $totalVisits) * 100;
+                                    ?>
+                                        <tr>
+                                            <td>
+                                                <?php echo $row['referrer'] ? htmlspecialchars($row['referrer']) : 'Direct'; ?>
+                                            </td>
+                                            <td><?php echo $row['visit_count']; ?></td>
+                                            <td>
+                                                <div class="progress">
+                                                    <div class="progress-bar" role="progressbar"
+                                                        style="width: <?php echo $percentage; ?>%;"
+                                                        aria-valuenow="<?php echo $percentage; ?>" aria-valuemin="0"
+                                                        aria-valuemax="100">
+                                                        <?php echo round($percentage, 1); ?>%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        <?php 
+                                        endwhile;
+                                    } else {
+                                    ?>
+                                        <tr>
+                                            <td colspan="3" class="text-center">No referrer data available</td>
+                                        </tr>
+                                        <?php } ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Geographic Data Tab -->
+                        <div class="tab-pane fade" id="geo" role="tabpanel" aria-labelledby="geo-tab">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="mb-3">Top Countries</h6>
+                                    <div class="chart-container">
+                                        <canvas id="countryChart"></canvas>
+                                    </div>
+
+                                    <div class="table-responsive mt-4">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Country</th>
+                                                    <th>Visits</th>
+                                                    <th>Percentage</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php 
+                                            if ($countryData && $countryData->num_rows > 0) {
+                                                mysqli_data_seek($countryData, 0);
+                                                while ($row = $countryData->fetch_assoc()): 
+                                                    $percentage = ($row['visit_count'] / $totalVisits) * 100;
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($row['country']); ?></td>
+                                                    <td><?php echo $row['visit_count']; ?></td>
+                                                    <td>
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-primary" role="progressbar"
+                                                                style="width: <?php echo $percentage; ?>%;"
+                                                                aria-valuenow="<?php echo $percentage; ?>"
+                                                                aria-valuemin="0" aria-valuemax="100">
+                                                                <?php echo round($percentage, 1); ?>%
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                <?php 
+                                                endwhile;
+                                            } else {
+                                            ?>
+                                                <tr>
+                                                    <td colspan="3" class="text-center">No country data available</td>
+                                                </tr>
+                                                <?php } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="mb-3">Top Cities</h6>
+                                    <div class="chart-container">
+                                        <canvas id="cityChart"></canvas>
+                                    </div>
+
+                                    <div class="table-responsive mt-4">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>City</th>
+                                                    <th>Country</th>
+                                                    <th>Visits</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php 
+                                            if ($cityData && $cityData->num_rows > 0) {
+                                                mysqli_data_seek($cityData, 0);
+                                                while ($row = $cityData->fetch_assoc()): 
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($row['city']); ?></td>
+                                                    <td><?php echo htmlspecialchars($row['country']); ?></td>
+                                                    <td>
+                                                        <span
+                                                            class="badge bg-primary"><?php echo $row['visit_count']; ?></span>
+                                                    </td>
+                                                </tr>
+                                                <?php 
+                                                endwhile;
+                                            } else {
+                                            ?>
+                                                <tr>
+                                                    <td colspan="3" class="text-center">No city data available</td>
+                                                </tr>
+                                                <?php } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Technology Tab -->
+                        <div class="tab-pane fade" id="tech" role="tabpanel" aria-labelledby="tech-tab">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6 class="mb-3">Device Types</h6>
+                                    <div class="chart-container">
+                                        <canvas id="deviceChart"></canvas>
+                                    </div>
+
+                                    <div class="table-responsive mt-4">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Device Type</th>
+                                                    <th>Visits</th>
+                                                    <th>Percentage</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php 
+                                            if ($deviceData && $deviceData->num_rows > 0) {
+                                                mysqli_data_seek($deviceData, 0);
+                                                while ($row = $deviceData->fetch_assoc()): 
+                                                    $percentage = ($row['visit_count'] / $totalVisits) * 100;
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($row['device_type']); ?></td>
+                                                    <td><?php echo $row['visit_count']; ?></td>
+                                                    <td>
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-success" role="progressbar"
+                                                                style="width: <?php echo $percentage; ?>%;"
+                                                                aria-valuenow="<?php echo $percentage; ?>"
+                                                                aria-valuemin="0" aria-valuemax="100">
+                                                                <?php echo round($percentage, 1); ?>%
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                <?php 
+                                                endwhile;
+                                            } else {
+                                            ?>
+                                                <tr>
+                                                    <td colspan="3" class="text-center">No device data available</td>
+                                                </tr>
+                                                <?php } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <h6 class="mb-3">Browsers</h6>
+                                    <div class="chart-container">
+                                        <canvas id="browserChart"></canvas>
+                                    </div>
+
+                                    <div class="table-responsive mt-4">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Browser</th>
+                                                    <th>Visits</th>
+                                                    <th>Percentage</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php 
+                                            if ($browserData && $browserData->num_rows > 0) {
+                                                mysqli_data_seek($browserData, 0);
+                                                while ($row = $browserData->fetch_assoc()): 
+                                                    $percentage = ($row['visit_count'] / $totalVisits) * 100;
+                                            ?>
+                                                <tr>
+                                                    <td><?php echo htmlspecialchars($row['browser']); ?></td>
+                                                    <td><?php echo $row['visit_count']; ?></td>
+                                                    <td>
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-info" role="progressbar"
+                                                                style="width: <?php echo $percentage; ?>%;"
+                                                                aria-valuenow="<?php echo $percentage; ?>"
+                                                                aria-valuemin="0" aria-valuemax="100">
+                                                                <?php echo round($percentage, 1); ?>%
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                <?php 
+                                                endwhile;
+                                            } else {
+                                            ?>
+                                                <tr>
+                                                    <td colspan="3" class="text-center">No browser data available</td>
+                                                </tr>
+                                                <?php } ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Link Clicks Tab (keep your existing one) -->
+                        <div class="tab-pane fade" id="clicks" role="tabpanel" aria-labelledby="clicks-tab">
+                            <h6 class="mb-3">Link Click Performance</h6>
+                            <div class="chart-container">
+                                <canvas id="linkClicksChart"></canvas>
+                            </div>
+
+                            <h6 class="mt-4 mb-3">Most Clicked Links</h6>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Platform</th>
+                                            <th>Link</th>
+                                            <th>Clicks</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php
+                                    // Reset the link clicks result pointer
+                                    if ($linkClicks) {
+                                        mysqli_data_seek($linkClicks, 0);
+                                        while ($linkClick = $linkClicks->fetch_assoc()): 
+                                    ?>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="platform-icon">
+                                                        <i class="fab fa-<?php echo $linkClick['platform']; ?>"></i>
+                                                    </div>
+                                                    <?php echo ucfirst($linkClick['platform']); ?>
+                                                </div>
+                                            </td>
+                                            <td><?php echo htmlspecialchars($linkClick['display_text']); ?></td>
+                                            <td>
+                                                <span class="badge bg-primary"><?php echo $linkClick['click_count']; ?>
+                                                    clicks</span>
+                                            </td>
+                                        </tr>
+                                        <?php 
+                                        endwhile;
+                                    }
+                                    ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="#" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-file-export me-1"></i> Export Data
+                    </a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
         </div>
@@ -877,53 +1036,381 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://code.jquery.com/ui/1.13.0/jquery-ui.min.js"></script>
     <script>
-        // Initialize drag-and-drop functionality for reordering links
-        $(function() {
-            $("#sortable-links").sortable({
-                update: function(event, ui) {
-                    // Get the new order of link IDs
-                    const linkIds = $(this).sortable("toArray", { attribute: "data-id" });
-                    
-                    // Send the new order to the server via AJAX
-                    $.ajax({
-                        url: "update_link_order.php",
-                        method: "POST",
-                        data: { link_order: linkIds },
-                        success: function(response) {
-                            console.log("Link order updated successfully");
-                        },
-                        error: function(error) {
-                            console.error("Error updating link order", error);
+    // Initialize drag-and-drop functionality for reordering links
+    $(function() {
+        $("#sortable-links").sortable({
+            update: function(event, ui) {
+                // Get the new order of link IDs
+                const linkIds = $(this).sortable("toArray", {
+                    attribute: "data-id"
+                });
+
+                // Send the new order to the server via AJAX
+                $.ajax({
+                    url: "update_link_order.php",
+                    method: "POST",
+                    data: {
+                        link_order: linkIds
+                    },
+                    success: function(response) {
+                        console.log("Link order updated successfully");
+                    },
+                    error: function(error) {
+                        console.error("Error updating link order", error);
+                    }
+                });
+            }
+        });
+        $("#sortable-links").disableSelection();
+    });
+
+    // Layout option selection
+    document.querySelectorAll('.layout-option').forEach(option => {
+        option.addEventListener('click', function() {
+            // Remove active class from all options
+            document.querySelectorAll('.layout-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+
+            // Add active class to the clicked option
+            this.classList.add('active');
+
+            // Check the corresponding radio button
+            const radio = this.querySelector('input[type="radio"]');
+            radio.checked = true;
+        });
+    });
+
+    // Initialize analytics charts
+    document.addEventListener('DOMContentLoaded', function() {
+        // Data for charts
+        const dates = <?php echo json_encode($dates); ?>;
+        const visitCounts = <?php echo json_encode($visitCounts); ?>;
+
+        // Main dashboard visits chart
+        const visitsCtx = document.getElementById('visitsChart').getContext('2d');
+        new Chart(visitsCtx, {
+            type: 'line',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Profile Visits',
+                    data: visitCounts,
+                    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+                    borderColor: 'rgba(108, 99, 255, 1)',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    pointBackgroundColor: 'white',
+                    pointBorderColor: 'rgba(108, 99, 255, 1)',
+                    pointBorderWidth: 2,
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            drawBorder: false
                         }
-                    });
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+
+        // Detailed visits chart in modal
+        const detailedVisitsCtx = document.getElementById('detailedVisitsChart').getContext('2d');
+        new Chart(detailedVisitsCtx, {
+            type: 'bar',
+            data: {
+                labels: dates,
+                datasets: [{
+                    label: 'Daily Visits',
+                    data: visitCounts,
+                    backgroundColor: 'rgba(108, 99, 255, 0.7)',
+                    borderRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Link clicks chart
+        const linkClicksCtx = document.getElementById('linkClicksChart').getContext('2d');
+
+        <?php
+            // Prepare data for link clicks chart
+            $platforms = [];
+            $clickCounts = [];
+            
+            if ($linkClicks) {
+                mysqli_data_seek($linkClicks, 0);
+                while ($row = $linkClicks->fetch_assoc()) {
+                    $platforms[] = ucfirst($row['platform']);
+                    $clickCounts[] = $row['click_count'];
+                }
+            }
+            ?>
+
+        const platforms = <?php echo json_encode($platforms); ?>;
+        const clickCounts = <?php echo json_encode($clickCounts); ?>;
+
+        new Chart(linkClicksCtx, {
+            type: 'doughnut',
+            data: {
+                labels: platforms,
+                datasets: [{
+                    data: clickCounts,
+                    backgroundColor: [
+                        'rgba(108, 99, 255, 0.7)',
+                        'rgba(255, 101, 132, 0.7)',
+                        'rgba(40, 199, 111, 0.7)',
+                        'rgba(255, 159, 64, 0.7)',
+                        'rgba(54, 162, 235, 0.7)',
+                        'rgba(153, 102, 255, 0.7)',
+                        'rgba(255, 206, 86, 0.7)',
+                        'rgba(75, 192, 192, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+
+        // Country chart data preparation
+        <?php
+        $countries = [];
+        $countryVisits = [];
+
+        if ($countryData) {
+            mysqli_data_seek($countryData, 0);
+            while ($row = $countryData->fetch_assoc()) {
+                $countries[] = $row['country'];
+                $countryVisits[] = $row['visit_count'];
+            }
+        }
+        ?>
+
+        const countries = <?php echo json_encode($countries); ?>;
+        const countryVisits = <?php echo json_encode($countryVisits); ?>;
+
+        // City chart data preparation
+        <?php
+        $cities = [];
+        $cityVisits = [];
+
+        if ($cityData) {
+            mysqli_data_seek($cityData, 0);
+            while ($row = $cityData->fetch_assoc()) {
+                $cities[] = $row['city'] . ', ' . $row['country'];
+                $cityVisits[] = $row['visit_count'];
+            }
+        }
+        ?>
+
+        const cities = <?php echo json_encode($cities); ?>;
+        const cityVisits = <?php echo json_encode($cityVisits); ?>;
+
+        // Device chart data preparation
+        <?php
+        $devices = [];
+        $deviceVisits = [];
+
+        if ($deviceData) {
+            mysqli_data_seek($deviceData, 0);
+            while ($row = $deviceData->fetch_assoc()) {
+                $devices[] = $row['device_type'];
+                $deviceVisits[] = $row['visit_count'];
+            }
+        }
+        ?>
+
+        const devices = <?php echo json_encode($devices); ?>;
+        const deviceVisits = <?php echo json_encode($deviceVisits); ?>;
+
+        // Browser chart data preparation
+        <?php
+        $browsers = [];
+        $browserVisits = [];
+
+        if ($browserData) {
+            mysqli_data_seek($browserData, 0);
+            while ($row = $browserData->fetch_assoc()) {
+                $browsers[] = $row['browser'];
+                $browserVisits[] = $row['visit_count'];
+            }
+        }
+        ?>
+
+        const browsers = <?php echo json_encode($browsers); ?>;
+        const browserVisits = <?php echo json_encode($browserVisits); ?>;
+
+        // Initialize country chart
+        if (document.getElementById('countryChart')) {
+            const countryCtx = document.getElementById('countryChart').getContext('2d');
+            new Chart(countryCtx, {
+                type: 'bar',
+                data: {
+                    labels: countries,
+                    datasets: [{
+                        label: 'Visits by Country',
+                        data: countryVisits,
+                        backgroundColor: 'rgba(108, 99, 255, 0.7)',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
                 }
             });
-            $("#sortable-links").disableSelection();
-        });
-        
-        // Navbar scroll effect
-        window.addEventListener('scroll', function() {
-            const navbar = document.querySelector('.navbar');
-            if (window.scrollY > 50) {
-                navbar.style.padding = '10px 0';
-                navbar.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
-            } else {
-                navbar.style.padding = '15px 0';
-                navbar.style.boxShadow = '0 2px 15px rgba(0, 0, 0, 0.1)';
-            }
-        });
-        
-        // Preview profile image upon selection
-        document.getElementById('profile_image').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    document.querySelector('.profile-image').src = e.target.result;
+        }
+
+        // Initialize city chart
+        if (document.getElementById('cityChart')) {
+            const cityCtx = document.getElementById('cityChart').getContext('2d');
+            new Chart(cityCtx, {
+                type: 'bar',
+                data: {
+                    labels: cities,
+                    datasets: [{
+                        label: 'Visits by City',
+                        data: cityVisits,
+                        backgroundColor: 'rgba(255, 101, 132, 0.7)',
+                        borderRadius: 5
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
                 }
-                reader.readAsDataURL(file);
+            });
+        }
+
+        // Initialize device chart
+        if (document.getElementById('deviceChart')) {
+            const deviceCtx = document.getElementById('deviceChart').getContext('2d');
+            new Chart(deviceCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: devices,
+                    datasets: [{
+                        data: deviceVisits,
+                        backgroundColor: [
+                            'rgba(108, 99, 255, 0.7)',
+                            'rgba(40, 199, 111, 0.7)',
+                            'rgba(255, 159, 64, 0.7)',
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        // Initialize browser chart
+        if (document.getElementById('browserChart')) {
+            const browserCtx = document.getElementById('browserChart').getContext('2d');
+            new Chart(browserCtx, {
+                type: 'pie',
+                data: {
+                    labels: browsers,
+                    datasets: [{
+                        data: browserVisits,
+                        backgroundColor: [
+                            'rgba(54, 162, 235, 0.7)',
+                            'rgba(255, 101, 132, 0.7)',
+                            'rgba(255, 206, 86, 0.7)',
+                            'rgba(75, 192, 192, 0.7)',
+                            'rgba(153, 102, 255, 0.7)'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    // Navbar scroll effect
+    window.addEventListener('scroll', function() {
+        const navbar = document.querySelector('.navbar');
+        if (window.scrollY > 50) {
+            navbar.style.padding = '10px 0';
+            navbar.style.boxShadow = '0 5px 15px rgba(0, 0, 0, 0.1)';
+        } else {
+            navbar.style.padding = '15px 0';
+            navbar.style.boxShadow = '0 2px 15px rgba(0, 0, 0, 0.1)';
+        }
+    });
+
+    // Preview profile image upon selection
+    document.getElementById('profile_image').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.querySelector('.profile-image').src = e.target.result;
             }
-        });
+            reader.readAsDataURL(file);
+        }
+    });
     </script>
 </body>
+
 </html>
