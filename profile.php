@@ -594,6 +594,58 @@ $themeClass = 'theme-' . $userData['theme'];
     .hidden-link {
         display: none;
     }
+
+
+    .modal-content {
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+}
+
+.theme-dark .modal-content {
+    background-color: #1e1e1e;
+    color: #f8f9fa;
+}
+
+.theme-dark .modal-header, 
+.theme-dark .modal-footer {
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.qr-container {
+    position: relative;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.qr-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+    transform: scale(0.8);
+    opacity: 0;
+    transition: all 0.5s ease;
+}
+
+.qr-image.loaded {
+    transform: scale(1);
+    opacity: 1;
+}
+
+.qr-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.theme-dark .btn-close {
+    filter: invert(1);
+}
+
     </style>
 </head>
 
@@ -719,8 +771,7 @@ $themeClass = 'theme-' . $userData['theme'];
                 <?php endif; ?>
 
                 <div class="mt-3 animate__animated animate__fadeIn animate__delay-3s">
-                    <a href="generate_qr.php?user=<?php echo $userData['username']; ?>"
-                        class="btn btn-qr float-animation">
+                    <a href="#" id="show-qr-btn" class="btn btn-qr float-animation">
                         <i class="fas fa-qrcode me-2"></i> Show QR Code
                     </a>
                 </div>
@@ -732,7 +783,34 @@ $themeClass = 'theme-' . $userData['theme'];
                         class="footer-brand">SocialLinks</span></a></p>
         </div>
     </div>
-
+    <div class="modal fade" id="qrCodeModal" tabindex="-1" aria-labelledby="qrCodeModalLabel" aria-hidden="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="qrCodeModalLabel">Scan QR Code</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="qr-container">
+                        <div class="qr-loading">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                        <img id="qr-code-img" class="img-fluid qr-image" style="display: none;" alt="QR Code">
+                    </div>
+                    <p class="mt-3">Scan this code to visit <?php echo $userData['username']; ?>'s profile</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <a id="download-qr" href="#" download="<?php echo $userData['username']; ?>-qrcode.png"
+                        class="btn btn-primary">
+                        <i class="fas fa-download me-2"></i> Save QR Code
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/wow/1.1.2/wow.min.js"></script>
     <script>
@@ -811,6 +889,56 @@ $themeClass = 'theme-' . $userData['theme'];
     window.addEventListener('load', adjustContainerHeight);
     window.addEventListener('resize', adjustContainerHeight);
     </script>
+    <script>
+// Your existing scripts remain unchanged
+
+// QR code functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const showQrBtn = document.getElementById('show-qr-btn');
+    const qrCodeImg = document.getElementById('qr-code-img');
+    const downloadQr = document.getElementById('download-qr');
+    const qrModal = new bootstrap.Modal(document.getElementById('qrCodeModal'));
+    
+    showQrBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        
+        // Show modal with loading state
+        qrModal.show();
+        
+        // Generate QR code
+        const username = '<?php echo $userData["username"]; ?>';
+        const qrUrl = `generate_qr.php?user=${encodeURIComponent(username)}`;
+        
+        // Set random parameter to prevent caching
+        const timestamp = new Date().getTime();
+        const noCacheUrl = `${qrUrl}&_=${timestamp}`;
+        
+        // Load the QR code
+        qrCodeImg.onload = function() {
+            // Hide loading spinner
+            document.querySelector('.qr-loading').style.display = 'none';
+            
+            // Show QR with animation
+            qrCodeImg.style.display = 'block';
+            setTimeout(() => {
+                qrCodeImg.classList.add('loaded');
+            }, 100);
+            
+            // Set download link
+            downloadQr.href = qrCodeImg.src;
+        };
+        
+        qrCodeImg.src = noCacheUrl;
+    });
+    
+    // When modal is hidden, reset QR state
+    document.getElementById('qrCodeModal').addEventListener('hidden.bs.modal', function () {
+        qrCodeImg.classList.remove('loaded');
+        qrCodeImg.style.display = 'none';
+        document.querySelector('.qr-loading').style.display = 'block';
+    });
+});
+</script>
 </body>
 
 </html>
