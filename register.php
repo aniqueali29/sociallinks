@@ -1,9 +1,15 @@
 <?php
 // register.php - User registration with enhanced security, validation and Google OAuth
 session_start();
+
 require_once 'database.php';
 require_once 'google-config.php'; // Create this file for Google OAuth configuration
 
+// Add this near the top of your script after session_start()
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    error_log('Session token: ' . $_SESSION['csrf_token']);
+    error_log('Posted token: ' . $_POST['csrf_token']);
+}
 // CSRF Protection
 if (!isset($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -21,10 +27,7 @@ function validateInput($data) {
 $username = "";
 $email = "";
 $errors = [];
-
-// Check if coming from Google OAuth
-$fromGoogle = isset($_GET['google']) && $_GET['google'] == '1';
-$googleData = isset($_SESSION['google_data']) ? $_SESSION['google_data'] : null;
+$fromGoogle = false; // Add this line to define the variable
 
 // Google Login setup
 require_once 'vendor/autoload.php';
@@ -32,7 +35,7 @@ require_once 'vendor/autoload.php';
 $googleClient = new Google_Client();
 $googleClient->setClientId($googleClientId);
 $googleClient->setClientSecret($googleClientSecret);
-$googleClient->setRedirectUri($googleRedirectUrl);
+$googleClient->setRedirectUri($googleRegisterRedirectUrl);
 $googleClient->addScope("email");
 $googleClient->addScope("profile");
 
@@ -50,16 +53,99 @@ if (isset($_GET['code']) && !empty($_GET['code'])) {
             $googleService = new Google_Service_Oauth2($googleClient);
             $userData = $googleService->userinfo->get();
             
-            // Store Google data in session for registration form
-            $_SESSION['google_data'] = [
-                'id' => $userData->id,
-                'email' => $userData->email,
-                'name' => $userData->name
-            ];
+            // Store Google data for automatic registration
+            $googleId = $userData->id;
+            $email = $userData->email;
+            // Generate a username from Google name
+            $suggestedUsername = strtolower(str_replace(' ', '', $userData->name)) . rand(100, 999);
+            $username = $suggestedUsername;
             
-            // Redirect to the registration form with Google flag
-            header("Location: register.php?google=1");
-            exit;
+            // Check if the user already exists with this Google ID or email
+            $checkSQL = "SELECT * FROM users WHERE google_id = ? OR email = ?";
+            $stmt = $conn->prepare($checkSQL);
+            $stmt->bind_param("ss", $googleId, $email);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($result->num_rows > 0) {
+                // User already exists, log them in
+                $user = $result->fetch_assoc();
+                
+                // Update Google ID if not set but email matches
+                if ($user['google_id'] === null && $user['email'] === $email) {
+                    $updateSQL = "UPDATE users SET google_id = ? WHERE email = ?";
+                    $updateStmt = $conn->prepare($updateSQL);
+                    $updateStmt->bind_param("ss", $googleId, $email);
+                    $updateStmt->execute();
+                }
+                
+                // Log the login
+                $user_id = $user['id'];
+                $ip = $_SERVER['REMOTE_ADDR'];
+                $userAgent = $_SERVER['HTTP_USER_AGENT'];
+                $logAction = 'google_login';
+                $logSQL = "INSERT INTO login_logs (user_id, action, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, NOW())";
+                $logStmt = $conn->prepare($logSQL);
+                $logStmt->bind_param("isss", $user_id, $logAction, $ip, $userAgent);
+                $logStmt->execute();
+                
+                // Set session
+                $_SESSION['user_id'] = $user_id;
+                $_SESSION['username'] = $user['username'];
+                $_SESSION['auth_time'] = time();
+                
+                // Regenerate session ID to prevent session fixation
+                session_regenerate_id(true);
+                
+                // Redirect to dashboard
+                header("Location: dashboard.php");
+                exit;
+            } else {
+                // New user, automatically register them
+                
+                // Generate a secure random password (they won't need it for Google login)
+                $password = bin2hex(random_bytes(16));
+                $passwordHash = password_hash($password, PASSWORD_ARGON2ID, [
+                    'memory_cost' => 65536,
+                    'time_cost' => 4,
+                    'threads' => 3
+                ]);
+                
+                // Insert new user
+                // In the Google OAuth callback section after getting $userData
+                $profile_image = $userData->picture;
+
+                // Update the insert SQL
+                $insertSQL = "INSERT INTO users (username, email, password, google_id, profile_image, created_at) VALUES (?, ?, ?, ?, ?, NOW())";
+                $stmt = $conn->prepare($insertSQL);
+                $stmt->bind_param("sssss", $username, $email, $passwordHash, $googleId, $profile_image);
+                                
+                if ($stmt->execute()) {
+                    // Log registration
+                    $user_id = $stmt->insert_id;
+                    $ip = $_SERVER['REMOTE_ADDR'];
+                    $userAgent = $_SERVER['HTTP_USER_AGENT'];
+                    $logAction = 'google_register';
+                    $logSQL = "INSERT INTO login_logs (user_id, action, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, NOW())";
+                    $logStmt = $conn->prepare($logSQL);
+                    $logStmt->bind_param("isss", $user_id, $logAction, $ip, $userAgent);
+                    $logStmt->execute();
+                    
+                    // Set session
+                    $_SESSION['user_id'] = $user_id;
+                    $_SESSION['username'] = $username;
+                    $_SESSION['auth_time'] = time();
+                    
+                    // Regenerate session ID
+                    session_regenerate_id(true);
+                    
+                    // Redirect to dashboard
+                    header("Location: dashboard.php");
+                    exit;
+                } else {
+                    $errors[] = "Registration failed: " . $conn->error;
+                }
+            }
         } else {
             $errors[] = "Google authentication failed. Please try again.";
         }
@@ -68,12 +154,15 @@ if (isset($_GET['code']) && !empty($_GET['code'])) {
     }
 }
 
-// Pre-fill form with Google data if available
-if ($fromGoogle && $googleData) {
-    $email = $googleData['email'];
-    // Generate a suggested username from Google name
-    $suggestedUsername = strtolower(str_replace(' ', '', $googleData['name'])) . rand(100, 999);
-    $username = $suggestedUsername;
+// For backward compatibility with the form display, also check for google=1 parameter
+if (isset($_GET['google']) && $_GET['google'] == '1') {
+    $fromGoogle = true;
+    // If Google data is in session, use it
+    $googleData = isset($_SESSION['google_data']) ? $_SESSION['google_data'] : null;
+    if ($googleData) {
+        $email = $googleData['email'];
+        $username = strtolower(str_replace(' ', '', $googleData['name'])) . rand(100, 999);
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -85,14 +174,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Validate all inputs
     $username = validateInput($_POST['username']);
     $email = validateInput($_POST['email']);
-    $googleId = $fromGoogle && $googleData ? $googleData['id'] : null;
+    $password = isset($_POST['password']) ? $_POST['password'] : '';
+    $confirm_password = isset($_POST['confirm_password']) ? $_POST['confirm_password'] : '';
     
-    // If not from Google, validate password
+    // Check if this is a Google registration
+    $fromGoogle = isset($_POST['from_google']) && $_POST['from_google'] == '1';
+    $googleId = $fromGoogle && isset($_SESSION['google_data']) ? $_SESSION['google_data']['id'] : null;
+    
+    // Password validation - only if not from Google
     if (!$fromGoogle) {
-        $password = $_POST['password'];
-        $confirm_password = $_POST['confirm_password'];
-        
-        // Password validation
         if (strlen($password) < 8) {
             $errors[] = "Password must be at least 8 characters long";
         }
@@ -219,6 +309,19 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 </head>
 
 <body>
+    <div class="background-shapes">
+        <div class="shape shape-1"></div>
+        <div class="shape shape-2"></div>
+        <div class="shape shape-3"></div>
+        <div class="shape shape-4"></div>
+    </div>
+    <div class="floating-shapes">
+        <div class="floating-shape floating-shape-1"></div>
+        <div class="floating-shape floating-shape-2"></div>
+        <div class="floating-shape floating-shape-3"></div>
+    </div>
+
+    <div class="particles" id="particles"></div>
     <div class="container auth-container">
         <div class="row justify-content-center w-100">
             <div class="col-lg-10">
@@ -282,6 +385,10 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                                     <input type="hidden" name="csrf_token"
                                         value="<?php echo $_SESSION['csrf_token']; ?>">
 
+                                    <?php if ($fromGoogle): ?>
+                                    <input type="hidden" name="from_google" value="1">
+                                    <?php endif; ?>
+
                                     <div class="form-floating mb-4">
                                         <input type="text" class="form-control" id="username" name="username"
                                             placeholder="Username" value="<?php echo $username; ?>" required>
@@ -331,9 +438,19 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                                         <span class="social-login-text">Or sign up with</span>
                                     </div>
 
-                                    <div class="social-buttons">
-                                        <a href="<?php echo $googleAuthUrl; ?>" class="social-button">
-                                            <i class="fab fa-google"></i>
+                                    <div class="social-login-container">
+                                        <a href="<?php echo $googleAuthUrl; ?>" class="google-signin-button">
+                                            <div class="google-icon-wrapper">
+                                                <!-- Google "G" logo as SVG directly in the code -->
+                                                <svg class="google-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                                                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                                                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                                                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                                                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                                                    <path fill="none" d="M0 0h48v48H0z"/>
+                                                </svg>
+                                            </div>
+                                            <span class="button-text">Sign in with Google</span>
                                         </a>
                                     </div>
 
@@ -511,6 +628,137 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
     const tooltipList = tooltipTriggerList.map(function(tooltipTriggerEl) {
         return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+
+
+
+
+
+    // Add this to your existing JavaScript
+
+    // Enhanced animations for form elements
+    document.addEventListener('DOMContentLoaded', function() {
+        // Staggered animation for form elements
+        const formElements = document.querySelectorAll(
+            '.form-floating, .btn-primary, .social-buttons, .form-check, .new-user-banner');
+
+        formElements.forEach((element, index) => {
+            element.style.opacity = '0';
+            element.style.transform = 'translateY(20px)';
+            element.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            element.style.transitionDelay = `${index * 0.1}s`;
+
+            setTimeout(() => {
+                element.style.opacity = '1';
+                element.style.transform = 'translateY(0)';
+            }, 100);
+        });
+
+        // Form field focus animations
+        const formControls = document.querySelectorAll('.form-control');
+        formControls.forEach(control => {
+            control.addEventListener('focus', function() {
+                this.parentElement.classList.add('input-focused');
+            });
+
+            control.addEventListener('blur', function() {
+                if (this.value === '') {
+                    this.parentElement.classList.remove('input-focused');
+                }
+            });
+        });
+
+        // Password strength indicator
+        const passwordField = document.getElementById('password');
+        if (passwordField) {
+            const strengthIndicator = document.createElement('div');
+            strengthIndicator.className = 'password-strength mt-1';
+            strengthIndicator.innerHTML = `
+            <div class="progress" style="height: 5px;">
+                <div class="progress-bar bg-danger" role="progressbar" style="width: 0%"></div>
+            </div>
+            <small class="text-muted mt-1 d-block password-feedback"></small>
+        `;
+
+            passwordField.parentElement.appendChild(strengthIndicator);
+
+            passwordField.addEventListener('input', function() {
+                const value = this.value;
+                const progressBar = strengthIndicator.querySelector('.progress-bar');
+                const feedback = strengthIndicator.querySelector('.password-feedback');
+
+                if (value.length === 0) {
+                    progressBar.style.width = '0%';
+                    progressBar.className = 'progress-bar';
+                    feedback.textContent = '';
+                    return;
+                }
+
+                let strength = 0;
+
+                // Add strength based on length
+                if (value.length > 6) strength += 20;
+                if (value.length > 10) strength += 10;
+
+                // Add strength for character types
+                if (/[A-Z]/.test(value)) strength += 20;
+                if (/[a-z]/.test(value)) strength += 15;
+                if (/[0-9]/.test(value)) strength += 15;
+                if (/[^A-Za-z0-9]/.test(value)) strength += 20;
+
+                progressBar.style.width = `${strength}%`;
+
+                if (strength < 30) {
+                    progressBar.className = 'progress-bar bg-danger';
+                    feedback.textContent = 'Weak password';
+                } else if (strength < 60) {
+                    progressBar.className = 'progress-bar bg-warning';
+                    feedback.textContent = 'Moderate password';
+                } else {
+                    progressBar.className = 'progress-bar bg-success';
+                    feedback.textContent = 'Strong password';
+                }
+            });
+        }
+
+        // Add subtle parallax effect to the background shapes
+        document.addEventListener('mousemove', function(e) {
+            const shapes = document.querySelectorAll('.shape');
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+
+            shapes.forEach(shape => {
+                const speed = parseFloat(shape.getAttribute('data-speed') || 0.05);
+                const moveX = (x - 0.5) * speed * 100;
+                const moveY = (y - 0.5) * speed * 100;
+
+                shape.style.transform = `translate(${moveX}px, ${moveY}px)`;
+            });
+        });
+    });
+
+    // Enhance the loading overlay
+    document.getElementById('loginForm').addEventListener('submit', function(event) {
+        if (this.checkValidity()) {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            loadingOverlay.classList.add('show');
+
+            // Add animated text to the loading overlay
+            const loadingText = loadingOverlay.querySelector('p');
+            const originalText = loadingText.textContent;
+            let dots = 0;
+
+            const textAnimation = setInterval(() => {
+                dots = (dots + 1) % 4;
+                loadingText.textContent = originalText.replace('...', '.'.repeat(dots));
+            }, 500);
+
+            // This is just for demo purposes to simulate loading
+            // Remove this setTimeout in production
+            setTimeout(() => {
+                clearInterval(textAnimation);
+            }, 5000);
+        }
     });
     </script>
 </body>
