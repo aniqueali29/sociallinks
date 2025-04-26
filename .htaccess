@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# If folder or file exists, skip
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+
+# Redirect all requests like /mini/username to profile.php?user=username
+RewriteRule ^([a-zA-Z0-9_]+)$ profile.php?user=$1 [L,QSA]

@@ -1276,3 +1276,72 @@
         margin: 10px auto;
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Add to your CSS file */
+.font-item {
+    border: 1px solid #eee;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.font-item:hover {
+    background-color: rgba(108, 99, 255, 0.05);
+    transform: translateY(-2px);
+}
+
+.font-item.selected {
+    border-color: var(--primary-color);
+    background-color: rgba(108, 99, 255, 0.1);
+    box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.2);
+}
+
+.font-preview {
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.font-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #999;
+}
+
+.font-category {
+    background-color: #f5f5f5;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: capitalize;
+}
+
+.font-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 15px;
+}

@@ -380,6 +380,83 @@ session_start();
             line-height: 1.7;
         }
         
+        /* Testimonials section */
+        .testimonials-section {
+            padding: 120px 0;
+            background: #f9f9ff;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .testimonial-card {
+            background: white;
+            border-radius: var(--border-radius-md);
+            padding: 40px;
+            box-shadow: var(--shadow-md);
+            margin: 20px 10px;
+            position: relative;
+            transition: var(--transition);
+        }
+        
+        .testimonial-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-lg);
+        }
+        
+        .testimonial-quote {
+            color: var(--primary-color);
+            font-size: 4rem;
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            opacity: 0.1;
+        }
+        
+        .testimonial-text {
+            font-style: italic;
+            color: #555;
+            line-height: 1.8;
+            margin-bottom: 25px;
+            font-size: 1.1rem;
+        }
+        
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .testimonial-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .testimonial-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .testimonial-info h4 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+        
+        .testimonial-info p {
+            margin: 0;
+            color: #777;
+            font-size: 0.9rem;
+        }
+        
+        .testimonial-rating {
+            color: #FFD700;
+            margin-top: 5px;
+        }
+        
         /* CTA section */
         .cta-section {
             background-color: #F8F9FA;
@@ -820,6 +897,9 @@ session_start();
                         <a class="nav-link" href="#features">Features</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="#testimonials">Testimonials</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="#cta">Get Started</a>
                     </li>
                     <?php if (isset($_SESSION['user_id'])): ?>
@@ -1004,6 +1084,7 @@ session_start();
                     <h3 class="footer-heading">Quick Links</h3>
                     <ul class="footer-links">
                         <li><a href="#features">Features</a></li>
+                        <li><a href="#testimonials">Testimonials</a></li>
                         <li><a href="#cta">Get Started</a></li>
                         <li><a href="login.php">Login</a></li>
                         <li><a href="register.php">Sign Up</a></li>

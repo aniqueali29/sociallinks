@@ -59,17 +59,104 @@ $layoutClass = 'layout-' . ($userData['links_layout'] ?? 'list');
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap"
-        rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <meta property="og:title" content="<?php echo htmlspecialchars($userData['username']); ?> - SocialLinks" />
     <meta property="og:description" content="Check out my social media links!" />
     <meta property="og:type" content="website" />
     <link rel="stylesheet" href="./css/profile.css">
+
+    <?php
+    // Load selected font
+    $selectedFont = isset($userData['font_family']) ? $userData['font_family'] : 'Poppins';
+    $fontUrl = 'https://fonts.googleapis.com/css2?family=' . str_replace(' ', '+', $selectedFont) . ':wght@300;400;500;600;700&display=swap';
+    ?>
+    <link href="<?php echo $fontUrl; ?>" rel="stylesheet">
+
+    <?php if (!empty($userData['font_family'])): ?>
+    <link href="https://fonts.googleapis.com/css?family=<?php echo urlencode($userData['font_family']); ?>&display=swap" rel="stylesheet">
+    <style>
+        body, .font-controlled {
+            font-family: '<?php echo htmlspecialchars($userData['font_family']); ?>', sans-serif;
+        }
+    </style>
+    <?php endif; ?>
+
+    <style>
+    body[style*="background-image"] .wave-shape {
+        display: none;
+    }
+
+    body[style*="background-image"] .profile-card {
+        background-color: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(10px);
+    }
+
+    body[style*="background-image"].theme-dark .profile-card {
+        background-color: rgba(33, 37, 41, 0.85);
+    }
+
+    body {
+        font-family: '<?php echo $selectedFont; ?>', sans-serif;
+    }
+
+    /* Ensure fallback for specific elements */
+    .profile-name,
+    .profile-bio,
+    .social-links-counter,
+    .social-link {
+        font-family: inherit !important;
+    }
+
+    .badge-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+
+    .status-online {
+        background-color: #28c76f;
+        box-shadow: 0 0 0 2px rgba(40, 199, 111, 0.3);
+        animation: pulse 2s infinite;
+    }
+
+    .status-away {
+        background-color: #ff9f43;
+        box-shadow: 0 0 0 2px rgba(255, 159, 67, 0.3);
+    }
+
+    .status-offline {
+        background-color: #ea5455;
+        box-shadow: 0 0 0 2px rgba(234, 84, 85, 0.3);
+    }
+
+    @keyframes pulse {
+        0% {
+            box-shadow: 0 0 0 0 rgba(40, 199, 111, 0.7);
+        }
+
+        70% {
+            box-shadow: 0 0 0 4px rgba(40, 199, 111, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0 rgba(40, 199, 111, 0);
+        }
+    }
+    </style>
 </head>
 
 <!-- <body class="<?php echo $themeClass; ?>"> -->
-<body class="<?php echo $themeClass; ?> layout-<?php echo $userData['links_layout'] ? $userData['links_layout'] : 'list'; ?>">
+
+<body
+    class="<?php echo $themeClass; ?> layout-<?php echo $userData['links_layout'] ? $userData['links_layout'] : 'list'; ?>"
+    <?php if (!empty($userData['background_image'])): ?> style="background-image: url('<?php echo htmlspecialchars($userData['background_image']); ?>'); 
+             background-size: cover; 
+             background-position: center center; 
+             background-attachment: fixed;" <?php endif; ?>>
+
     <svg class="wave-shape" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320">
         <path fill="rgba(108, 99, 255, 0.05)" fill-opacity="1"
             d="M0,224L48,213.3C96,203,192,181,288,154.7C384,128,480,96,576,96C672,96,768,128,864,149.3C960,171,1056,181,1152,170.7C1248,160,1344,128,1392,112L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z">
@@ -82,7 +169,31 @@ $layoutClass = 'layout-' . ($userData['links_layout'] ?? 'list');
                 <div class="profile-overlay"></div>
                 <div class="profile-pattern"></div>
                 <div class="profile-badge">
-                    <span class="badge-dot"></span> Online
+                    <?php
+                    $status = 'offline'; // Default status
+                    $statusText = 'Offline';
+                    
+                    if ($userData['online_status'] === 'online') {
+                        $status = 'online';
+                        $statusText = 'Online';
+                    } elseif ($userData['online_status'] === 'away') {
+                        $status = 'away';
+                        
+                        // Calculate time since last activity
+                        $lastActivity = new DateTime($userData['last_activity']);
+                        $now = new DateTime();
+                        $diff = $now->diff($lastActivity);
+                        
+                        if ($diff->days > 0) {
+                            $statusText = 'Active ' . $diff->days . ' day' . ($diff->days > 1 ? 's' : '') . ' ago';
+                        } elseif ($diff->h > 0) {
+                            $statusText = 'Active ' . $diff->h . ' hour' . ($diff->h > 1 ? 's' : '') . ' ago';
+                        } else {
+                            $statusText = 'Active ' . $diff->i . ' minute' . ($diff->i > 1 ? 's' : '') . ' ago';
+                        }
+                    }
+                    ?>
+                    <span class="badge-dot status-<?php echo $status; ?>"></span> <?php echo $statusText; ?>
                 </div>
             </div>
 
