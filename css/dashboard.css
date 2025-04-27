@@ -99,15 +99,6 @@
 
     /* Dashboard Header */
     .dashboard-header {
-        /* background: var(--gradient);
-        padding: 120px 0 30px;
-        color: white;
-        position: relative;
-        overflow: hidden;
-        margin-bottom: 40px;
-        border-bottom-left-radius: 40px;
-        border-bottom-right-radius: 40px; */
-
         background: var(--gradient-light);
         color: white;
         padding: 60px 0 40px;

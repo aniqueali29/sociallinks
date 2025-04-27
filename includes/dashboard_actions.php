@@ -251,56 +251,58 @@ function handleUpdateProfile($conn, $user_id, &$response) {
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $userData = $stmt->get_result()->fetch_assoc();
-    
+
     $bio = $_POST['bio'];
     $theme = $_POST['theme'];
     $font_family = $_POST['font_family'];
-    
+
     // Handle profile image upload
     $profile_image = $userData['profile_image']; // Default to current image
-    
+
     if (isset($_FILES['profile_image']) && $_FILES['profile_image']['error'] === 0) {
-        $upload_dir = "uploads/";
+        $upload_dir = "../uploads/";
         if (!file_exists($upload_dir)) {
             mkdir($upload_dir, 0777, true);
         }
-        
+
         $file_ext = pathinfo($_FILES['profile_image']['name'], PATHINFO_EXTENSION);
         $new_filename = uniqid() . "." . $file_ext;
         $target_file = $upload_dir . $new_filename;
-        
+
         if (move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_file)) {
-            $profile_image = $target_file;
+            // Save only 'uploads/[filename]' to DB
+            $profile_image = "uploads/" . $new_filename;
         }
     }
-    
+
     // Handle background image upload
     $background_image = $userData['background_image']; // Default to current background
-    
+
     // Check if user wants to remove the background image
     if (isset($_POST['remove_background'])) {
         $background_image = NULL;
     }
     // Check if a new background image is uploaded
     elseif (isset($_FILES['background_image']) && $_FILES['background_image']['error'] === 0) {
-        $upload_dir = "uploads/backgrounds/";
+        $upload_dir = "../uploads/backgrounds/";
         if (!file_exists($upload_dir)) {
             mkdir($upload_dir, 0777, true);
         }
-        
+
         $file_ext = pathinfo($_FILES['background_image']['name'], PATHINFO_EXTENSION);
         $new_filename = "bg_" . $user_id . "_" . uniqid() . "." . $file_ext;
         $target_file = $upload_dir . $new_filename;
-        
+
         if (move_uploaded_file($_FILES['background_image']['tmp_name'], $target_file)) {
-            $background_image = $target_file;
+            // Save only 'uploads/backgrounds/[filename]' to DB
+            $background_image = "uploads/backgrounds/" . $new_filename;
         }
     }
-    
+
     $updateSQL = "UPDATE users SET bio = ?, theme = ?, profile_image = ?, font_family = ?, background_image = ? WHERE user_id = ?";
     $stmt = $conn->prepare($updateSQL);
     $stmt->bind_param("sssssi", $bio, $theme, $profile_image, $font_family, $background_image, $user_id);
-    
+
     if ($stmt->execute()) {
         $response['success'] = true;
         $response['message'] = "Profile updated successfully.";
@@ -309,4 +311,5 @@ function handleUpdateProfile($conn, $user_id, &$response) {
         $response['message'] = "Error updating profile: " . $conn->error;
     }
 }
+
 ?>

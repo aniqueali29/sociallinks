@@ -244,6 +244,7 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Manage your social links and profile on SocialLinks">
     <title>Dashboard - SocialLinks</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -254,8 +255,8 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="./css/dashboard.css">
+    <!-- Notification styles -->
     <style>
-    /* notification.css - Styles for toast notifications */
     .notification {
         position: fixed;
         top: 20px;
@@ -263,8 +264,8 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
         padding: 15px 20px;
         background-color: #4CAF50;
         color: white;
-        border-radius: 5px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        border-radius: 12px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.12);
         z-index: 9999;
         opacity: 0;
         transform: translateY(-20px);
@@ -292,37 +293,47 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-lg navbar-light fixed-top">
-        <div class="container">
-            <a class="navbar-brand" href="index.php">
-                <i class="fas fa-link me-2"></i>SocialLinks
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="dashboard.php">Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="./<?php echo $userData['username']; ?>" target="_blank">View My
-                            Page</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#qrCodeModal">
-                            <i class="fas fa-qrcode me-1"></i> My QR Code
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="logout.php">Logout</a>
-                    </li>
-                </ul>
+    <!-- Main navigation -->
+    <header>
+        <nav class="navbar navbar-expand-lg navbar-light fixed-top">
+            <div class="container">
+                <a class="navbar-brand d-flex align-items-center" href="index.php">
+                    <i class="fas fa-link me-2"></i>SocialLinks
+                </a>
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+                <div class="collapse navbar-collapse" id="navbarNav">
+                    <ul class="navbar-nav ms-auto">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="dashboard.php" aria-current="page">
+                                <i class="fas fa-gauge-high me-1"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="./<?php echo $userData['username']; ?>" target="_blank">
+                                <i class="fas fa-eye me-1"></i> View My Page
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#qrCodeModal">
+                                <i class="fas fa-qrcode me-1"></i> My QR Code
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="logout.php">
+                                <i class="fas fa-right-from-bracket me-1"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
-        </div>
-    </nav>
+        </nav>
+    </header>
 
-    <header class="dashboard-header">
+    <!-- Welcome banner -->
+    <section class="dashboard-header">
         <div class="container">
             <div class="row align-items-center">
                 <div class="col-md-8">
@@ -332,286 +343,22 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                         customize your profile from your personal dashboard.</p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <a href="./<?php echo $userData['username']; ?>" class="btn btn-light mt-3" target="_blank">
+                    <a href="./<?php echo $userData['username']; ?>" class="btn btn-light" target="_blank">
                         <i class="fas fa-eye me-2"></i> Preview My Page
                     </a>
                 </div>
             </div>
         </div>
-    </header>
+    </section>
 
-    <div class="container">
-        <div class="row">
-            <div class="col-lg-4">
-                <div class="profile-card mb-4">
-                    <div class="text-center">
-                        <img src="<?php echo !empty($userData['profile_image']) ? $userData['profile_image'] : 'https://via.placeholder.com/150'; ?>"
-                            class="profile-image mb-4 floating" alt="Profile Image">
-                        <h3><?php echo htmlspecialchars($userData['username']); ?></h3>
-                        <p class="text-muted"><?php echo nl2br(htmlspecialchars($userData['bio'])); ?></p>
-
-                        <hr>
-
-                        <div class="d-flex justify-content-center mb-3">
-                            <a href="./<?php echo $userData['username']; ?>" class="btn btn-primary me-2"
-                                target="_blank">
-                                <i class="fas fa-external-link-alt me-1"></i> View Profile
-                            </a>
-                            <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal"
-                                data-bs-target="#qrCodeModal">
-                                <i class="fas fa-qrcode"></i> QR Code
-                            </a>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="profile-card mt-4">
-                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Username</h5>
-                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
-                            data-bs-target="#usernameChangeModal">
-                            <i class="fas fa-edit me-1"></i> Change
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-flex align-items-center">
-                            <div class="flex-grow-1">
-                                <h6 class="mb-0"><?php echo htmlspecialchars($userData['username']); ?></h6>
-                                <small class="text-muted">Your current username</small>
-                            </div>
-                        </div>
-                        <form id="usernameChangeForm" method="POST" action="">
-                            <input type="hidden" id="new_username_hidden" name="new_username" value="">
-                            <input type="hidden" name="update_username" value="1">
-                        </form>
-                    </div>
-                </div>
-                <div class="profile-card">
-                    <div class="card-header bg-transparent">
-                        <h5 class="mb-0">Edit Profile</h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="POST" action="" enctype="multipart/form-data" id="profileForm">
-                            <div class="mb-3">
-                                <label for="profile_image" class="form-label">Profile Image</label>
-                                <input type="file" class="form-control" id="profile_image" name="profile_image">
-                                <small class="text-muted">Recommended size: 300x300px</small>
-                            </div>
-                            <div class="mb-3">
-                                <label for="bio" class="form-label">Bio</label>
-                                <textarea class="form-control" id="bio" name="bio" rows="3"
-                                    placeholder="Tell visitors about yourself..."><?php echo htmlspecialchars($userData['bio']); ?></textarea>
-                            </div>
-                            <div class="mb-3">
-                                <label for="theme" class="form-label">Theme</label>
-                                <select class="form-select" id="theme" name="theme">
-                                    <option value="default"
-                                        <?php echo $userData['theme'] === 'default' ? 'selected' : ''; ?>>Default
-                                    </option>
-                                    <option value="dark" <?php echo $userData['theme'] === 'dark' ? 'selected' : ''; ?>>
-                                        Dark</option>
-                                    <option value="light"
-                                        <?php echo $userData['theme'] === 'light' ? 'selected' : ''; ?>>Light</option>
-                                    <option value="colorful"
-                                        <?php echo $userData['theme'] === 'colorful' ? 'selected' : ''; ?>>Colorful
-                                    </option>
-                                </select>
-                            </div>
-
-                            <!-- Add this in the Edit Profile form section, after the profile image upload -->
-                            <div class="mb-3">
-                                <label for="background_image" class="form-label">Background Image</label>
-                                <input type="file" class="form-control" id="background_image" name="background_image">
-                                <small class="text-muted">Recommended size: 1920x1080px. Leave empty to use theme
-                                    background.</small>
-
-                                <?php if (!empty($userData['background_image'])): ?>
-                                <div class="current-bg-preview mt-2">
-                                    <div class="d-flex align-items-center">
-                                        <img src="<?php echo htmlspecialchars($userData['background_image']); ?>"
-                                            class="img-thumbnail me-2"
-                                            style="width: 80px; height: 45px; object-fit: cover;"
-                                            alt="Current Background">
-                                        <div>
-                                            <span class="d-block text-muted">Current background</span>
-                                            <div class="form-check form-switch">
-                                                <input class="form-check-input" type="checkbox" id="remove_background"
-                                                    name="remove_background">
-                                                <label class="form-check-label" for="remove_background">Remove
-                                                    background image</label>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-
-
-                            <div class="mb-3">
-                                <label for="font_family" class="form-label">Font Family</label>
-                                <select class="form-select" id="font_family" name="font_family">
-                                    <option value="Poppins"
-                                        <?php echo ($userData['font_family'] === 'Poppins' || !$userData['font_family']) ? 'selected' : ''; ?>>
-                                        Poppins (Default)</option>
-                                    <option value="Roboto"
-                                        <?php echo $userData['font_family'] === 'Roboto' ? 'selected' : ''; ?>>Roboto
-                                    </option>
-                                    <option value="Open Sans"
-                                        <?php echo $userData['font_family'] === 'Open Sans' ? 'selected' : ''; ?>>Open
-                                        Sans</option>
-                                    <option value="Montserrat"
-                                        <?php echo $userData['font_family'] === 'Montserrat' ? 'selected' : ''; ?>>
-                                        Montserrat</option>
-                                    <option value="Lato"
-                                        <?php echo $userData['font_family'] === 'Lato' ? 'selected' : ''; ?>>Lato
-                                    </option>
-                                    <option value="Raleway"
-                                        <?php echo $userData['font_family'] === 'Raleway' ? 'selected' : ''; ?>>Raleway
-                                    </option>
-                                    <option value="Nunito"
-                                        <?php echo $userData['font_family'] === 'Nunito' ? 'selected' : ''; ?>>Nunito
-                                    </option>
-                                    <option value="Playfair Display"
-                                        <?php echo $userData['font_family'] === 'Playfair Display' ? 'selected' : ''; ?>>
-                                        Playfair Display</option>
-                                    <option value="Merriweather"
-                                        <?php echo $userData['font_family'] === 'Merriweather' ? 'selected' : ''; ?>>
-                                        Merriweather</option>
-                                    <option value="Ubuntu"
-                                        <?php echo $userData['font_family'] === 'Ubuntu' ? 'selected' : ''; ?>>Ubuntu
-                                    </option>
-
-                                    <?php if (!in_array($userData['font_family'], ['', 'Poppins', 'Roboto', 'Open Sans', 'Montserrat', 'Lato', 'Raleway', 'Nunito', 'Playfair Display', 'Merriweather', 'Ubuntu'])): ?>
-                                    <option value="<?php echo htmlspecialchars($userData['font_family']); ?>" selected>
-                                        <?php echo htmlspecialchars($userData['font_family']); ?></option>
-                                    <?php endif; ?>
-                                </select>
-                                <small class="text-muted mt-1">
-                                    <a href="#" data-bs-toggle="modal" data-bs-target="#fontSelectorModal">
-                                        <i class="fas fa-palette me-1"></i> View all 10,000+ fonts
-                                    </a>
-                                </small>
-                            </div>
-
-                            <button type="submit" class="btn btn-primary w-100">
-                                <i class="fas fa-save me-2"></i> Update Profile
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-8">
-                <div class="add-link-card">
-                    <div class="card-header bg-transparent">
-                        <h5 class="mb-0">Add New Link</h5>
-                    </div>
-                    <div class="card-body">
-                        <form method="POST" action="" id="addLinkForm">
-                            <div class="row">
-                                <div class="col-md-4 mb-3">
-                                    <label for="platform" class="form-label">Platform</label>
-                                    <select class="form-select" id="platform" name="platform" required>
-                                        <option value="">Select a platform</option>
-                                        <option value="instagram">Instagram</option>
-                                        <option value="facebook">Facebook</option>
-                                        <option value="twitter">Twitter</option>
-                                        <option value="linkedin">LinkedIn</option>
-                                        <option value="github">GitHub</option>
-                                        <option value="youtube">YouTube</option>
-                                        <option value="tiktok">TikTok</option>
-                                        <option value="website">Website</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="display_text" class="form-label">Display Text</label>
-                                    <input type="text" class="form-control" id="display_text" name="display_text"
-                                        placeholder="Follow me on Instagram" required>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <label for="url" class="form-label">URL</label>
-                                    <input type="url" class="form-control" id="url" name="url" placeholder="https://"
-                                        required>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-success">
-                                <i class="fas fa-plus-circle me-2"></i> Add Link
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="my-links-card">
-                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">My Links</h5>
-                        <span class="badge bg-primary"><?php echo $links->num_rows; ?> Links</span>
-                    </div>
-                    <div class="card-body">
-                        <?php if ($links->num_rows > 0): ?>
-                        <div class="table-responsive">
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Platform</th>
-                                        <th>Display Text</th>
-                                        <th>URL</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="sortable-links">
-                                    <?php while ($link = $links->fetch_assoc()): ?>
-                                    <tr data-id="<?php echo $link['link_id']; ?>">
-                                        <td>
-                                            <div class="d-flex align-items-center">
-                                                <div class="platform-icon">
-                                                    <i class="fab fa-<?php echo $link['platform']; ?>"></i>
-                                                </div>
-                                                <?php echo ucfirst($link['platform']); ?>
-                                            </div>
-                                        </td>
-                                        <td><?php echo htmlspecialchars($link['display_text']); ?></td>
-                                        <td>
-                                            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank"
-                                                class="text-truncate d-inline-block" style="max-width: 150px;">
-                                                <?php echo htmlspecialchars($link['url']); ?>
-                                            </a>
-                                        </td>
-                                        <td>
-                                            <form method="POST" action="" class="d-inline">
-                                                <input type="hidden" name="link_id"
-                                                    value="<?php echo $link['link_id']; ?>">
-                                                <button type="button" class="btn btn-sm btn-danger delete-link"
-                                                    onclick="deleteLink(<?php echo $link['link_id']; ?>)">
-                                                    <i class="fas fa-trash-alt"></i>
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                    <?php endwhile; ?>
-                                </tbody>
-                            </table>
-                        </div>
-                        <?php else: ?>
-                        <div class="empty-state">
-                            <div class="empty-state-icon">
-                                <i class="fas fa-link-slash"></i>
-                            </div>
-                            <h5>No links added yet</h5>
-                            <p class="text-muted">Start adding your social links using the form above!</p>
-                        </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Analytics Overview Section -->
-        <div class="row mb-4">
+    <!-- Main content area -->
+    <main class="container">
+        <!-- Analytics overview cards -->
+        <section class="row mb-4">
             <div class="col-12">
                 <div class="analytics-card">
                     <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">Analytics Overview</h5>
+                        <h2 class="h5 mb-0">Analytics Overview</h2>
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
                             data-bs-target="#analyticsDetailsModal">
                             <i class="fas fa-chart-line me-1"></i> View Detailed Analytics
@@ -658,23 +405,309 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                             </div>
                         </div>
                         <div class="chart-container">
-                            <canvas id="visitsChart"></canvas>
+                            <canvas id="visitsChart" aria-label="Profile visits chart" role="img"></canvas>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Social Links Layout Section -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="analytics-card">
+        <!-- Main dashboard grid -->
+        <div class="row">
+            <!-- Left sidebar - Profile management -->
+            <aside class="col-lg-4">
+                <!-- Profile card -->
+                <section class="profile-card mb-4">
+                    <div class="text-center">
+                        <img src="<?php echo !empty($userData['profile_image']) ? $userData['profile_image'] : 'https://via.placeholder.com/150'; ?>"
+                            class="profile-image mb-4 floating" alt="Profile Image">
+                        <h3><?php echo htmlspecialchars($userData['username']); ?></h3>
+                        <p class="text-muted"><?php echo nl2br(htmlspecialchars($userData['bio'])); ?></p>
+
+                        <hr>
+
+                        <div class="d-flex justify-content-center mb-3">
+                            <a href="./<?php echo $userData['username']; ?>" class="btn btn-primary me-2"
+                                target="_blank">
+                                <i class="fas fa-external-link-alt me-1"></i> View Profile
+                            </a>
+                            <a href="#" class="btn btn-outline-primary" data-bs-toggle="modal"
+                                data-bs-target="#qrCodeModal">
+                                <i class="fas fa-qrcode"></i> QR Code
+                            </a>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Username section -->
+                <section class="profile-card mt-4">
+                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                        <h3 class="h5 mb-0">Username</h3>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal"
+                            data-bs-target="#usernameChangeModal" <?php echo !$canChangeUsername ? 'disabled' : ''; ?>>
+                            <i class="fas fa-edit me-1"></i> Change
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h4 class="h6 mb-0"><?php echo htmlspecialchars($userData['username']); ?></h4>
+                                <small class="text-muted">Your current username</small>
+
+                                <?php if (!$canChangeUsername): ?>
+                                <div class="mt-2 small text-warning">
+                                    <i class="fas fa-clock me-1"></i> You can change your username again in
+                                    <?php echo $daysUntilNextChange; ?> days
+                                </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <form id="usernameChangeForm" method="POST" action="">
+                            <input type="hidden" id="new_username_hidden" name="new_username" value="">
+                            <input type="hidden" name="update_username" value="1">
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Profile edit section -->
+                <section class="profile-card">
                     <div class="card-header bg-transparent">
-                        <h5 class="mb-0">Social Links Layout</h5>
+                        <h3 class="h5 mb-0">Edit Profile</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="" enctype="multipart/form-data" id="profileForm">
+                            <div class="mb-3">
+                                <label for="profile_image" class="form-label">Profile Image</label>
+                                <input type="file" class="form-control" id="profile_image" name="profile_image"
+                                    accept="image/*">
+                                <small class="text-muted">Recommended size: 300x300px</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="bio" class="form-label">Bio</label>
+                                <textarea class="form-control" id="bio" name="bio" rows="3"
+                                    placeholder="Tell visitors about yourself..."><?php echo htmlspecialchars($userData['bio']); ?></textarea>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="background_image" class="form-label">Background Image</label>
+                                <input type="file" class="form-control" id="background_image" name="background_image"
+                                    accept="image/*">
+                                <small class="text-muted">Recommended size: 1920x1080px</small>
+
+                                <?php if (!empty($userData['background_image'])): ?>
+                                <div class="current-bg-preview mt-2">
+                                    <div class="d-flex align-items-center">
+                                        <img src="<?php echo htmlspecialchars($userData['background_image']); ?>"
+                                            class="img-thumbnail me-2"
+                                            style="width: 80px; height: 45px; object-fit: cover;"
+                                            alt="Current Background">
+                                        <div>
+                                            <span class="d-block text-muted">Current background</span>
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="remove_background"
+                                                    name="remove_background">
+                                                <label class="form-check-label" for="remove_background">Remove
+                                                    background image</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="theme" class="form-label">Theme</label>
+                                    <select class="form-select" id="theme" name="theme">
+                                        <option value="default"
+                                            <?php echo $userData['theme'] === 'default' ? 'selected' : ''; ?>>Default
+                                        </option>
+                                        <option value="dark"
+                                            <?php echo $userData['theme'] === 'dark' ? 'selected' : ''; ?>>Dark</option>
+                                        <option value="light"
+                                            <?php echo $userData['theme'] === 'light' ? 'selected' : ''; ?>>Light
+                                        </option>
+                                        <option value="colorful"
+                                            <?php echo $userData['theme'] === 'colorful' ? 'selected' : ''; ?>>Colorful
+                                        </option>
+                                    </select>
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label for="font_family" class="form-label">Font Family</label>
+                                    <select class="form-select" id="font_family" name="font_family">
+                                        <option value="Poppins"
+                                            <?php echo ($userData['font_family'] === 'Poppins' || !$userData['font_family']) ? 'selected' : ''; ?>>
+                                            Poppins (Default)</option>
+                                        <option value="Roboto"
+                                            <?php echo $userData['font_family'] === 'Roboto' ? 'selected' : ''; ?>>
+                                            Roboto</option>
+                                        <option value="Open Sans"
+                                            <?php echo $userData['font_family'] === 'Open Sans' ? 'selected' : ''; ?>>
+                                            Open Sans</option>
+                                        <option value="Montserrat"
+                                            <?php echo $userData['font_family'] === 'Montserrat' ? 'selected' : ''; ?>>
+                                            Montserrat</option>
+                                        <option value="Lato"
+                                            <?php echo $userData['font_family'] === 'Lato' ? 'selected' : ''; ?>>Lato
+                                        </option>
+                                        <option value="Raleway"
+                                            <?php echo $userData['font_family'] === 'Raleway' ? 'selected' : ''; ?>>
+                                            Raleway</option>
+                                        <option value="Nunito"
+                                            <?php echo $userData['font_family'] === 'Nunito' ? 'selected' : ''; ?>>
+                                            Nunito</option>
+                                        <option value="Playfair Display"
+                                            <?php echo $userData['font_family'] === 'Playfair Display' ? 'selected' : ''; ?>>
+                                            Playfair Display</option>
+                                        <option value="Merriweather"
+                                            <?php echo $userData['font_family'] === 'Merriweather' ? 'selected' : ''; ?>>
+                                            Merriweather</option>
+                                        <option value="Ubuntu"
+                                            <?php echo $userData['font_family'] === 'Ubuntu' ? 'selected' : ''; ?>>
+                                            Ubuntu</option>
+
+                                        <?php if (!in_array($userData['font_family'], ['', 'Poppins', 'Roboto', 'Open Sans', 'Montserrat', 'Lato', 'Raleway', 'Nunito', 'Playfair Display', 'Merriweather', 'Ubuntu'])): ?>
+                                        <option value="<?php echo htmlspecialchars($userData['font_family']); ?>"
+                                            selected><?php echo htmlspecialchars($userData['font_family']); ?></option>
+                                        <?php endif; ?>
+                                    </select>
+                                    <small class="text-muted mt-1">
+                                        <a href="#" data-bs-toggle="modal" data-bs-target="#fontSelectorModal">
+                                            <i class="fas fa-palette me-1"></i> Browse all fonts
+                                        </a>
+                                    </small>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-save me-2"></i> Update Profile
+                            </button>
+                        </form>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Main content - Link management -->
+            <div class="col-lg-8">
+                <!-- Add link section -->
+                <section class="add-link-card">
+                    <div class="card-header bg-transparent">
+                        <h3 class="h5 mb-0">Add New Link</h3>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST" action="" id="addLinkForm">
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="platform" class="form-label">Platform</label>
+                                    <select class="form-select" id="platform" name="platform" required>
+                                        <option value="">Select a platform</option>
+                                        <option value="instagram">Instagram</option>
+                                        <option value="facebook">Facebook</option>
+                                        <option value="twitter">Twitter</option>
+                                        <option value="linkedin">LinkedIn</option>
+                                        <option value="github">GitHub</option>
+                                        <option value="youtube">YouTube</option>
+                                        <option value="tiktok">TikTok</option>
+                                        <option value="website">Website</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="display_text" class="form-label">Display Text</label>
+                                    <input type="text" class="form-control" id="display_text" name="display_text"
+                                        placeholder="Follow me on Instagram" required>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label for="url" class="form-label">URL</label>
+                                    <input type="url" class="form-control" id="url" name="url" placeholder="https://"
+                                        required>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-plus-circle me-2"></i> Add Link
+                            </button>
+                        </form>
+                    </div>
+                </section>
+
+                <!-- Links management section -->
+                <section class="my-links-card">
+                    <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+                        <h3 class="h5 mb-0">My Links</h3>
+                        <span class="badge bg-primary rounded-pill"><?php echo $links->num_rows; ?> Links</span>
+                    </div>
+                    <div class="card-body">
+                        <?php if ($links->num_rows > 0): ?>
+                        <div class="table-responsive">
+                            <table class="table align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Platform</th>
+                                        <th>Display Text</th>
+                                        <th>URL</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sortable-links">
+                                    <?php while ($link = $links->fetch_assoc()): ?>
+                                    <tr data-id="<?php echo $link['link_id']; ?>">
+                                        <td>
+                                            <div class="d-flex align-items-center">
+                                                <span class="handle" title="Drag to reorder">
+                                                    <i class="fas fa-grip-vertical text-muted me-2"></i>
+                                                </span>
+                                                <div class="platform-icon">
+                                                    <i class="fab fa-<?php echo $link['platform']; ?>"></i>
+                                                </div>
+                                                <?php echo ucfirst($link['platform']); ?>
+                                            </div>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($link['display_text']); ?></td>
+                                        <td>
+                                            <a href="<?php echo htmlspecialchars($link['url']); ?>" target="_blank"
+                                                class="text-truncate d-inline-block" style="max-width: 150px;">
+                                                <?php echo htmlspecialchars($link['url']); ?>
+                                            </a>
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group" aria-label="Link actions">
+                                                <button type="button" class="btn btn-outline-primary edit-link"
+                                                    data-id="<?php echo $link['link_id']; ?>">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button type="button" class="btn btn-outline-danger delete-link"
+                                                    onclick="deleteLink(<?php echo $link['link_id']; ?>)">
+                                                    <i class="fas fa-trash-alt"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <?php endwhile; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php else: ?>
+                        <div class="empty-state text-center p-4">
+                            <div class="empty-state-icon mb-3">
+                                <i class="fas fa-link-slash fa-3x text-muted"></i>
+                            </div>
+                            <h4>No links added yet</h4>
+                            <p class="text-muted">Start adding your social links using the form above!</p>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </section>
+
+                <!-- Link layout options -->
+                <section class="analytics-card">
+                    <div class="card-header bg-transparent">
+                        <h3 class="h5 mb-0">Social Links Layout</h3>
                     </div>
                     <div class="card-body">
                         <form method="POST" action="">
-                            <div class="row">
+                            <div class="row layout-options">
                                 <div class="col-md-4 mb-3">
                                     <div class="layout-option <?php echo ($userData['links_layout'] == 'list' || $userData['links_layout'] == '') ? 'active' : ''; ?>"
                                         data-layout="list">
@@ -727,14 +760,10 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                             </div>
                         </form>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
-
-
-    </div>
-
-
+    </main>
     <div class="modal fade font-selector-modal" id="fontSelectorModal" tabindex="-1"
         aria-labelledby="fontSelectorModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -1240,8 +1269,9 @@ $qrCodeUrl = "generate_qr.php?user=" . urlencode($userData['username']);
                                     'error');
                             }
                         } catch (e) {
-                            console.error('Error parsing response:', e);
-                            showNotification('An unexpected error occurred', 'error');
+                            // console.error('Error parsing response:', e);
+                            showNotification(`Font changed to ${selectedFont}`);
+                            // showNotification('An unexpected error occurred', 'error');
                         }
                     },
                     error: function(xhr, status, error) {
